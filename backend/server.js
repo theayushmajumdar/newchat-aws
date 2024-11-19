@@ -4,18 +4,25 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
   cors: {
-    origin: "*",  // Updated to allow all origins in production
+    origin: "*",  // Allow all origins for now (for development, adjust in production)
     methods: ["GET", "POST"]
   }
 });
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');  // Add this
-require('dotenv').config();
+require('dotenv').config();  // Ensure dotenv is loaded correctly
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Log the MongoDB URI to ensure it's being loaded correctly
+if (!process.env.MONGODB_URI) {
+  console.error('MongoDB URI is not defined in the .env file');
+  process.exit(1);  // Exit the app if MONGODB_URI is missing
+}
+console.log('MongoDB URI:', process.env.MONGODB_URI);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -24,7 +31,8 @@ mongoose.connect(process.env.MONGODB_URI, {
 }).then(() => {
   console.log('Connected to MongoDB Atlas');
 }).catch((error) => {
-  console.error('MongoDB connection error:', error);
+  console.error('MongoDB connection error:', error.message);
+  process.exit(1);  // Exit the app on connection error
 });
 
 // Message Schema
@@ -77,6 +85,7 @@ app.get('/api/messages/:room', async (req, res) => {
       .limit(50);
     res.json(messages);
   } catch (error) {
+    console.error('Error fetching messages:', error);
     res.status(500).json({ error: 'Error fetching messages' });
   }
 });
