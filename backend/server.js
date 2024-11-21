@@ -1,39 +1,39 @@
-// backend/server.js
+require('dotenv').config();
 const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http, {
-  cors: {
-    origin: "*",  // Allow all origins for now (for development, adjust in production)
-    methods: ["GET", "POST"]
-  }
-});
+const http = require('http');
+const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const path = require('path');  // Add this
-require('dotenv').config();  // Ensure dotenv is loaded correctly
+const path = require('path');
+
+const PORT = process.env.PORT || 5001;
+const app = express();
+const server = http.createServer(app);
+
+// Updated Socket.IO configuration for production behind Nginx
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  },
+  allowEIO3: true,
+  path: '/socket.io/',
+  transports: ['websocket', 'polling']
+});
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Log the MongoDB URI to ensure it's being loaded correctly
-if (!process.env.MONGODB_URI) {
-  console.error('MongoDB URI is not defined in the .env file');
-  process.exit(1);  // Exit the app if MONGODB_URI is missing
-}
-console.log('MongoDB URI:', process.env.MONGODB_URI);
-
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => {
-  console.log('Connected to MongoDB Atlas');
-}).catch((error) => {
-  console.error('MongoDB connection error:', error.message);
-  process.exit(1);  // Exit the app on connection error
-});
+// MongoDB Connection with updated options
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('Connected to MongoDB Atlas');
+  })
+  .catch((error) => {
+    console.error('MongoDB connection error:', error.message);
+    process.exit(1);
+  });
 
 // Message Schema
 const messageSchema = new mongoose.Schema({
@@ -45,7 +45,7 @@ const messageSchema = new mongoose.Schema({
 
 const Message = mongoose.model('Message', messageSchema);
 
-// Socket.IO Connection
+// Socket.IO Connection with error handling
 io.on('connection', (socket) => {
   console.log('A user connected');
 
@@ -55,13 +55,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_message', async (data) => {
-    const message = new Message({
-      user: data.user,
-      content: data.content,
-      room: data.room
-    });
-
     try {
+      const message = new Message({
+        user: data.user,
+        content: data.content,
+        room: data.room
+      });
+
       await message.save();
       io.to(data.room).emit('receive_message', {
         ...data,
@@ -69,7 +69,12 @@ io.on('connection', (socket) => {
       });
     } catch (error) {
       console.error('Error saving message:', error);
+      socket.emit('error', 'Failed to save message');
     }
+  });
+
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
   });
 
   socket.on('disconnect', () => {
@@ -77,7 +82,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// API Routes
+// API Routes with error handling
 app.get('/api/messages/:room', async (req, res) => {
   try {
     const messages = await Message.find({ room: req.params.room })
@@ -90,15 +95,20 @@ app.get('/api/messages/:room', async (req, res) => {
   }
 });
 
-// Serve static files from React build
+// Serve static files - updated path for EC2 deployment
 app.use(express.static(path.join(__dirname, '../frontend/build')));
 
-// Handle React routing, return all requests to React app
+// Handle React routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
 });
 
-const PORT = process.env.PORT || 5000;
-http.listen(PORT, () => {
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something broke!' });
+});
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

@@ -1,10 +1,14 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 
-const ENDPOINT = "http://localhost:5000";
-const socket = io(ENDPOINT);
+// Socket connection with error handling
+const socket = io({
+  path: '/socket.io/',
+  transports: ['websocket', 'polling'],
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000
+});
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -12,6 +16,7 @@ function App() {
   const [username, setUsername] = useState('');
   const [room, setRoom] = useState('');
   const [isJoined, setIsJoined] = useState(false);
+  const [connectionError, setConnectionError] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -19,11 +24,24 @@ function App() {
   };
 
   useEffect(() => {
+    // Socket error handling
+    socket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      setConnectionError('Unable to connect to chat server');
+    });
+
+    socket.on('reconnect', (attemptNumber) => {
+      console.log('Reconnected on attempt:', attemptNumber);
+      setConnectionError(null);
+    });
+
     socket.on('receive_message', (message) => {
       setMessages((prevMessages) => [...prevMessages, message]);
     });
 
     return () => {
+      socket.off('connect_error');
+      socket.off('reconnect');
       socket.off('receive_message');
     };
   }, []);
@@ -33,19 +51,22 @@ function App() {
   }, [messages]);
 
   const joinRoom = async () => {
-    if (username && room) { 
-      
+    if (!username.trim() || !room.trim()) {
+      alert('Please enter both username and room name');
+      return;
+    }
+
+    try {
       socket.emit('join_room', room);
-      
-      try {
-        const response = await fetch(`${ENDPOINT}/api/messages/${room}`);
-        const data = await response.json();
-        setMessages(data.reverse());
-      } catch (error) {
-        console.error('Error fetching messages:', error);
-      }
-      
+      const response = await fetch(`/api/messages/${room}`);
+      if (!response.ok) throw new Error('Failed to fetch messages');
+      const data = await response.json();
+      setMessages(data.reverse());
       setIsJoined(true);
+      setConnectionError(null);
+    } catch (error) {
+      console.error('Error joining room:', error);
+      setConnectionError('Failed to join room. Please try again.');
     }
   };
 
@@ -68,6 +89,9 @@ function App() {
     return (
       <div className="join-container">
         <h2>Join Chat</h2>
+        {connectionError && (
+          <div className="error-message">{connectionError}</div>
+        )}
         <input
           type="text"
           placeholder="Username"
@@ -91,7 +115,11 @@ function App() {
         <h2>Chat Room: {room}</h2>
         <p>Welcome, {username}!</p>
       </div>
-      
+
+      {connectionError && (
+        <div className="error-banner">{connectionError}</div>
+      )}
+
       <div className="messages-container">
         {messages.map((message, index) => (
           <div
