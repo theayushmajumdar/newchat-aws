@@ -8,8 +8,8 @@ cloned the git repo made directory in the instance then installed all the depend
 
 
 
-                 :: For The Learning Curve ::
-               --------------------------------
+                                                        :: For The Learning Curve ::
+                                                      ---------------------------------
 - Later on for the learning curve you can use AWS route 53 for hosting it on a domain name and enable a SSH to it for a secure connection .
 - And then after you can practice multiple application hosting with different domains inside a single AWS EC2 Instance using nginx ,
 
