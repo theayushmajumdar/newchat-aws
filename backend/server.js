@@ -95,12 +95,12 @@ app.get('/api/messages/:room', async (req, res) => {
   }
 });
 
-// Serve static files - updated path for EC2 deployment
-app.use(express.static(path.join(__dirname, '../frontend/build')));
+// Serve static files from the correct path inside Docker
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Handle React routing
+// Handle React routing - Serve index.html
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Error handling middleware
